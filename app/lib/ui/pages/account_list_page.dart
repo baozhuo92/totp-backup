@@ -11,6 +11,7 @@ import '../../services/sync_service.dart';
 import '../../services/totp_service.dart';
 import '../widgets/account_card.dart';
 import 'manual_add_page.dart';
+import 'restore_page.dart';
 import 'scan_page.dart';
 
 /// 账户列表主界面：动态码卡片 + 倒计时圆环 + 搜索 + 空状态。
@@ -74,7 +75,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('从服务端恢复'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('恢复功能将在后续步骤接入');
+                _openRestorePage();
               },
             ),
             ListTile(
@@ -140,6 +141,13 @@ class _AccountListPageState extends State<AccountListPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ManualAddPage(existing: existing)),
+    );
+  }
+
+  Future<void> _openRestorePage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RestorePage()),
     );
   }
 
