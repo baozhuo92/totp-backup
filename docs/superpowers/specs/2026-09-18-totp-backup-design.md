@@ -38,7 +38,7 @@
 | App 指纹 | local_auth | 本地锁 |
 | App 加密 | cryptography（AES-256-GCM + PBKDF2） | 端到端加密 |
 | App HTTP | dio | 服务端通信 |
-| TOTP 计算 | 自实现 RFC 6238 | 不引第三方，可控可验 |
+| TOTP 计算 | `otp` 包（pub.dev 稳定版，主版本锁定） | 成熟 RFC 6238 实现，社区审查，纯 Dart 无原生依赖；otpauth URI 解析自行实现（格式固定，约 30 行） |
 | 服务端 | Go + Gin | 主人指定 |
 | 数据库 | SQLite | 主人指定，单用户够用 |
 | 部署 | Docker Compose | 主人指定，数据卷挂载 SQLite 文件 |
