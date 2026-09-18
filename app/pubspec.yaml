@@ -40,7 +40,6 @@ dependencies:
   local_auth: ^3.0.2
   sqflite: ^2.4.4
   dio: ^5.11.1
-  path_provider: ^2.1.6
   flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
