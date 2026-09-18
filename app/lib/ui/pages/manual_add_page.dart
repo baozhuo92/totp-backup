@@ -4,6 +4,7 @@ import '../../data/local/account_repository.dart';
 import '../../data/models/totp_account.dart';
 import '../../services/account_cache.dart';
 import '../../services/lock_service.dart';
+import '../../services/sync_service.dart';
 import '../../services/totp_service.dart';
 
 /// 手动添加/编辑账户页。
@@ -105,6 +106,7 @@ class _ManualAddPageState extends State<ManualAddPage> {
           period: _period,
         );
         await AccountRepository().update(updated, pwd);
+        await SyncService.instance.enqueueAddOrUpdate(updated);
       } else {
         final created = TOTPAccount.create(
           issuer: _issuerController.text.trim(),
@@ -115,8 +117,11 @@ class _ManualAddPageState extends State<ManualAddPage> {
           period: _period,
         );
         await AccountRepository().insert(created, pwd);
+        await SyncService.instance.enqueueAddOrUpdate(created);
       }
       await AccountCache.instance.reload();
+      // 同步失败自动留队，列表页周期重试
+      SyncService.instance.flush();
       if (!mounted) return;
       Navigator.pop(context, true);
     } finally {

@@ -5,6 +5,7 @@ import '../../data/local/account_repository.dart';
 import '../../data/models/totp_account.dart';
 import '../../services/account_cache.dart';
 import '../../services/lock_service.dart';
+import '../../services/sync_service.dart';
 
 /// 扫码添加页：识别 otpauth:// URI，确认后入库并刷新缓存。
 /// 无效二维码提示后继续扫描；相机权限拒绝由 MobileScanner 内部错误状态处理。
@@ -92,12 +93,15 @@ class _ScanPageState extends State<ScanPage> {
     return result ?? false;
   }
 
-  /// 入库并刷新缓存（同步由任务 9 的 SyncService 统一处理）
+  /// 入库并刷新缓存；入队同步并立即尝试（失败自动留队，周期重试）
   Future<void> _save(TOTPAccount account) async {
     final pwd = LockService.instance.masterPassword;
     if (pwd == null) return;
     await AccountRepository().insert(account, pwd);
     await AccountCache.instance.reload();
+    await SyncService.instance.enqueueAddOrUpdate(account);
+    // 不 await：同步是后台行为，失败由队列机制兜底
+    SyncService.instance.flush();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../data/local/account_repository.dart';
 import '../../data/models/totp_account.dart';
 import '../../services/account_cache.dart';
+import '../../services/sync_service.dart';
 import '../../services/totp_service.dart';
 import '../widgets/account_card.dart';
 import 'manual_add_page.dart';
@@ -22,6 +24,7 @@ class AccountListPage extends StatefulWidget {
 
 class _AccountListPageState extends State<AccountListPage> {
   Timer? _ticker;
+  Timer? _syncTicker;
   String _query = '';
 
   @override
@@ -35,11 +38,16 @@ class _AccountListPageState extends State<AccountListPage> {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+    // 每 60 秒尝试清空同步队列（自动重试失败的备份）
+    _syncTicker = Timer.periodic(const Duration(seconds: 60), (_) {
+      SyncService.instance.flush();
+    });
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _syncTicker?.cancel();
     super.dispose();
   }
 
@@ -206,7 +214,41 @@ class _AccountListPageState extends State<AccountListPage> {
     );
   }
 
-  /// 长按账户操作菜单（编辑/删除，任务 8/9 接入真实动作）
+  /// 删除账户：确认后本地删除 + 入队 DELETE 并尝试同步
+  Future<void> _deleteAccount(TOTPAccount account) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除账户'),
+        content: Text('确定删除 ${account.issuer}（${account.account}）？\n'
+            '删除后将同步到服务端备份。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await AccountRepository().delete(account.clientId);
+    await AccountCache.instance.reload();
+    await SyncService.instance.enqueueDelete(account.clientId);
+    SyncService.instance.flush();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('已删除 ${account.issuer}')));
+  }
+
+  /// 长按账户操作菜单（编辑/删除）
   void _showAccountMenu(TOTPAccount account) {
     showModalBottomSheet<void>(
       context: context,
@@ -235,7 +277,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('删除', style: TextStyle(color: AppTheme.danger)),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('删除功能将在后续步骤接入');
+                _deleteAccount(account);
               },
             ),
           ],
