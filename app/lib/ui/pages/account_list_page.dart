@@ -8,6 +8,8 @@ import '../../data/models/totp_account.dart';
 import '../../services/account_cache.dart';
 import '../../services/totp_service.dart';
 import '../widgets/account_card.dart';
+import 'manual_add_page.dart';
+import 'scan_page.dart';
 
 /// 账户列表主界面：动态码卡片 + 倒计时圆环 + 搜索 + 空状态。
 /// 数据源为 AccountCache（内存明文缓存，解锁后加载），每秒重绘一次刷新验证码。
@@ -89,7 +91,7 @@ class _AccountListPageState extends State<AccountListPage> {
     );
   }
 
-  /// 添加菜单（扫码/手动添加，任务 8 接入）
+  /// 添加菜单（扫码/手动添加）
   void _showAddMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -102,7 +104,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('扫码添加'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('扫码功能将在后续步骤接入');
+                _openScanPage();
               },
             ),
             ListTile(
@@ -110,12 +112,26 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('手动添加'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('手动添加将在后续步骤接入');
+                _openManualAddPage();
               },
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _openScanPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScanPage()),
+    );
+  }
+
+  Future<void> _openManualAddPage({TOTPAccount? existing}) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ManualAddPage(existing: existing)),
     );
   }
 
@@ -211,7 +227,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('编辑'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('编辑功能将在后续步骤接入');
+                _openManualAddPage(existing: account);
               },
             ),
             ListTile(
