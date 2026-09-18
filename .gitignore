@@ -1,0 +1,9 @@
+# Go 模块缓存重定向目录（沙箱环境将 GOPATH 指向项目内）
+.gopath/
+
+# 本地运行数据（SQLite 文件）
+server/data/
+
+# 构建产物
+server/totp-server
+*.exe
