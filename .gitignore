@@ -1,8 +1,14 @@
 # Go 模块缓存重定向目录（沙箱环境将 GOPATH 指向项目内）
 .gopath/
 
+# IDE 目录
+server/.idea/
+
 # 本地运行数据（SQLite 文件）
 server/data/
+
+# 本地环境配置（含 API Key，禁止入库；以 .env.example 为模板）
+server/.env
 
 # 构建产物
 server/totp-server

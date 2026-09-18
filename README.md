@@ -90,6 +90,8 @@ flutter build apk --release
 | 导入 / 导出 | 菜单 → 导入/导出备份文件（otpauth 文本剪贴板） |
 | 修改服务端配置 | 菜单 → 设置 |
 
+> **测试辅助**：没有现成 TOTP 账户时，可用在线工具 [raybyte.cn/tools/totp](https://raybyte.cn/tools/totp/) 生成模拟的 TOTP 密钥与二维码，用于验证扫码添加、验证码显示与备份同步流程。
+
 ## 安全说明
 
 - **主口令不落盘**：进程被杀后需重新输入；启用指纹后主口令存于 Android Keystore（生物识别门闩保护）
