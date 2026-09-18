@@ -10,6 +10,7 @@ import '../../services/account_cache.dart';
 import '../../services/sync_service.dart';
 import '../../services/totp_service.dart';
 import '../widgets/account_card.dart';
+import 'import_export_page.dart';
 import 'manual_add_page.dart';
 import 'restore_page.dart';
 import 'scan_page.dart';
@@ -83,7 +84,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('导入/导出备份文件'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('导入导出功能将在后续步骤接入');
+                _openImportExportPage();
               },
             ),
             ListTile(
@@ -148,6 +149,13 @@ class _AccountListPageState extends State<AccountListPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const RestorePage()),
+    );
+  }
+
+  Future<void> _openImportExportPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ImportExportPage()),
     );
   }
 

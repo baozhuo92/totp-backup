@@ -132,6 +132,24 @@ class TOTPAccount {
     );
   }
 
+  /// 序列化为 otpauth:// URI（导出/分享用，与 [fromOtpauthUri] 互逆）。
+  /// label 使用 `issuer:account` 形式（RFC 6238/Google Authenticator 兼容），
+  /// issuer 为空时 label 仅 account；issuer 参数仅在非空时附带。
+  String toOtpauthUri() {
+    final label = issuer.isEmpty ? account : '$issuer:$account';
+    final params = <String, String>{
+      'secret': secretBase32,
+      'algorithm': algorithm,
+      'digits': '$digits',
+      'period': '$period',
+    };
+    if (issuer.isNotEmpty) params['issuer'] = issuer;
+    final qs = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    return 'otpauth://totp/${Uri.encodeComponent(label)}?$qs';
+  }
+
   /// 序列化（明文 secret，仅供加密前的中间表示/导出解密后使用）
   Map<String, dynamic> toJson() => {
         'client_id': clientId,
