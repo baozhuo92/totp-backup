@@ -14,6 +14,7 @@ import 'import_export_page.dart';
 import 'manual_add_page.dart';
 import 'restore_page.dart';
 import 'scan_page.dart';
+import 'settings_page.dart';
 
 /// 账户列表主界面：动态码卡片 + 倒计时圆环 + 搜索 + 空状态。
 /// 数据源为 AccountCache（内存明文缓存，解锁后加载），每秒重绘一次刷新验证码。
@@ -92,7 +93,7 @@ class _AccountListPageState extends State<AccountListPage> {
               title: const Text('设置'),
               onTap: () {
                 Navigator.pop(ctx);
-                _todoHint('设置功能将在后续步骤接入');
+                _openSettingsPage();
               },
             ),
           ],
@@ -159,10 +160,11 @@ class _AccountListPageState extends State<AccountListPage> {
     );
   }
 
-  void _todoHint(String msg) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg)));
+  Future<void> _openSettingsPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
   }
 
   @override
