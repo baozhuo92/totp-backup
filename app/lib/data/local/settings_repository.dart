@@ -45,6 +45,30 @@ class SettingsRepository {
 
   // ---- 非敏感开关（sqflite t_settings）----
 
+  /// 读取字符串设置（缺省返回 null）
+  Future<String?> getSetting(String key) async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      't_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String;
+  }
+
+  /// 写入字符串设置
+  Future<void> setSetting(String key, String value) async {
+    final db = await AppDatabase.instance.database;
+    await db.insert(
+      't_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// 读取布尔设置（缺省 [def]）
   Future<bool> getBool(String key, {bool def = false}) async {
     final db = await AppDatabase.instance.database;

@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 本地锁指纹解锁（local_auth 3.x 要求 USE_BIOMETRIC） -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
-        android:label="totp_backup"
+        android:label="TOTP 备份"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
