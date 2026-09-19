@@ -4,7 +4,8 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// 三张表：
 /// - t_account：账户（secret 以密文存储，绝不落明文）
-/// - t_settings：非敏感设置项（本地锁开关等；服务端地址/API Key 走 secure storage）
+/// - t_settings：设置项（本地锁指纹值、服务端地址/API Key 等；生物识别主口令
+///   仍走 Keystore secure storage，见 LockService）
 /// - t_sync_queue：同步失败待补推队列（任务 9 使用）
 class AppDatabase {
   AppDatabase._();
