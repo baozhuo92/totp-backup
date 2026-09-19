@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/local/account_repository.dart';
 import '../../data/models/totp_account.dart';
+import '../../main.dart' show appMessengerKey;
 import '../../services/account_cache.dart';
 import '../../services/lock_service.dart';
 import '../../services/sync_service.dart';
@@ -89,43 +92,62 @@ class _ManualAddPageState extends State<ManualAddPage> {
     }
 
     setState(() => _saving = true);
-    try {
-      final pwd = LockService.instance.masterPassword;
-      if (pwd == null) return;
-      final secret = _secretController.text.trim().toUpperCase();
+    final pwd = LockService.instance.masterPassword;
+    if (pwd == null) {
+      setState(() => _saving = false);
+      return;
+    }
+    final secret = _secretController.text.trim().toUpperCase();
+    final TOTPAccount account;
+    if (_isEdit) {
+      // 编辑模式：保留 clientId，走更新
+      account = TOTPAccount(
+        clientId: widget.existing!.clientId,
+        issuer: _issuerController.text.trim(),
+        account: _accountController.text.trim(),
+        secretBase32: secret,
+        algorithm: _algorithm,
+        digits: _digits,
+        period: _period,
+      );
+    } else {
+      account = TOTPAccount.create(
+        issuer: _issuerController.text.trim(),
+        account: _accountController.text.trim(),
+        secretBase32: secret,
+        algorithm: _algorithm,
+        digits: _digits,
+        period: _period,
+      );
+    }
+    // 立即返回列表（编辑/新增都秒级反馈），持久化与同步后台执行
+    Navigator.pop(context, true);
+    unawaited(_persist(account, pwd));
+  }
 
+  /// 后台持久化：加密入库/更新 → 缓存元数据秒出 → 入队同步并尝试 → 全量两阶段重载
+  Future<void> _persist(TOTPAccount account, String pwd) async {
+    try {
       if (_isEdit) {
-        // 编辑模式：保留 clientId，走更新
-        final updated = TOTPAccount(
-          clientId: widget.existing!.clientId,
-          issuer: _issuerController.text.trim(),
-          account: _accountController.text.trim(),
-          secretBase32: secret,
-          algorithm: _algorithm,
-          digits: _digits,
-          period: _period,
-        );
-        await AccountRepository().update(updated, pwd);
-        await SyncService.instance.enqueueAddOrUpdate(updated);
+        await AccountRepository().update(account, pwd);
       } else {
-        final created = TOTPAccount.create(
-          issuer: _issuerController.text.trim(),
-          account: _accountController.text.trim(),
-          secretBase32: secret,
-          algorithm: _algorithm,
-          digits: _digits,
-          period: _period,
-        );
-        await AccountRepository().insert(created, pwd);
-        await SyncService.instance.enqueueAddOrUpdate(created);
+        await AccountRepository().insert(account, pwd);
+        AccountCache.instance.insertMeta(account);
       }
+      await SyncService.instance.enqueueAddOrUpdate(account);
+      final ok = await SyncService.instance.flush();
       await AccountCache.instance.reload();
-      // 同步失败自动留队，列表页周期重试
-      SyncService.instance.flush();
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      appMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(ok
+              ? '已保存并备份到服务端'
+              : '已保存，备份失败已入重试队列'),
+        ));
+    } catch (_) {
+      appMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('保存失败，请重试')),
+      );
     }
   }
 

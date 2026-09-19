@@ -33,11 +33,15 @@ class _ImportExportPageState extends State<ImportExportPage> {
 
   /// 复制导出文本到剪贴板
   Future<void> _export() async {
-    final accounts = AccountCache.instance.accounts;
+    // 仅导出已解密的账户（未解密条目无明文 secret，无法导出）
+    final all = AccountCache.instance.accounts;
+    final accounts =
+        all.where((a) => a.hasSecret).map((a) => a.toAccount()).toList();
     if (accounts.isEmpty) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('暂无账户可导出')));
+        ..showSnackBar(SnackBar(
+            content: Text(all.isEmpty ? '暂无账户可导出' : '账户仍在解密中，请稍候再导出')));
       return;
     }
     final text = TotpExchangeService.exportToText(accounts);
