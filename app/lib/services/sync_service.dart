@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import '../data/local/app_database.dart';
 import '../data/local/settings_repository.dart';
 import '../data/models/totp_account.dart';
 import '../data/remote/api_client.dart';
+import 'account_cache.dart';
 
 /// 队列操作类型
 enum SyncOp { add, update, delete }
@@ -93,6 +95,8 @@ class SyncService extends ChangeNotifier {
       });
     }
     await refreshPending();
+    // 每账户同步状态：该账户转为待同步
+    unawaited(AccountCache.instance.refreshSyncStates());
   }
 
   /// 删除后入队（服务端软删除；payload 不需要）
@@ -112,6 +116,8 @@ class SyncService extends ChangeNotifier {
       'created_time': DateTime.now().millisecondsSinceEpoch,
     });
     await refreshPending();
+    // 每账户同步状态：该账户转为待同步（服务端删除尚未确认）
+    unawaited(AccountCache.instance.refreshSyncStates());
   }
 
   /// 队列中待同步的条目数
@@ -196,6 +202,8 @@ class SyncService extends ChangeNotifier {
           _lastError = e.message;
           await refreshPending();
           notifyListeners();
+          // 每账户同步状态：失败项保持待同步
+          unawaited(AccountCache.instance.refreshSyncStates());
           return false;
         }
       }
@@ -203,6 +211,8 @@ class SyncService extends ChangeNotifier {
       _lastSyncTime = DateTime.now();
       await refreshPending();
       notifyListeners();
+      // 每账户同步状态：同步成功的账户转为已备份
+      unawaited(AccountCache.instance.refreshSyncStates());
       return true;
     } finally {
       _flushing = false;
