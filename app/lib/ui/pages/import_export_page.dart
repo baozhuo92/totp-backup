@@ -59,11 +59,35 @@ class _ImportExportPageState extends State<ImportExportPage> {
     });
   }
 
-  /// 执行导入：跳过已存在（issuer+account 相同），新账户入库并入队同步
+  /// 执行导入：跳过已存在（issuer+account 相同），新账户入库并入队同步。
+  /// 导入前弹确认：导入的账户会以导入文件为准上传覆盖服务端同名账户，
+  /// 避免旧备份回退线上数据（防误覆盖）。
   Future<void> _import() async {
     if (_parsed.isEmpty) return;
     final pwd = LockService.instance.masterPassword;
     if (pwd == null) return;
+    // 确认提示：导入账户会同步上传并覆盖服务端同名账户
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认导入'),
+        content: Text('将导入 ${_parsed.length} 个账户。\n'
+            '导入的账户会以导入文件为准上传到服务端，'
+            '并覆盖服务端上的同名账户（防止旧备份回退线上数据）。\n'
+            '确认继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确认导入'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     setState(() => _importing = true);
     try {
       final existingKeys = AccountCache.instance.accounts
