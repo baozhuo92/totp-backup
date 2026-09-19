@@ -138,3 +138,23 @@ func ListAccounts(ctx context.Context, conn *sql.DB) ([]model.Account, error) {
 	}
 	return items, nil
 }
+
+// Stats 备份统计（状态页展示用，仅数量与时间，不含任何账户明细/密文）
+type Stats struct {
+	AccountCount   int   // 有效（未删除）账户数
+	LatestBackupTs int64 // 最近一次写入/更新时间（毫秒时间戳）
+}
+
+// GetStats 查询备份统计：有效账户总数与最近更新时间。
+// 供公开状态页使用；刻意不返回账户明细，避免泄露 issuer/账号等元数据。
+func GetStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
+	s := &Stats{}
+	err := conn.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(MAX(update_time), 0)
+		 FROM t_account WHERE delete_time = 0`,
+	).Scan(&s.AccountCount, &s.LatestBackupTs)
+	if err != nil {
+		return nil, fmt.Errorf("查询备份统计失败: %w", err)
+	}
+	return s, nil
+}
