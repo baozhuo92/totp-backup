@@ -1,5 +1,6 @@
-package com.owner.totp_backup
+package com.kelebb.totpbackup
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+
