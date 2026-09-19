@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../services/account_cache.dart';
 import 'countdown_ring.dart';
 
@@ -8,6 +9,8 @@ import 'countdown_ring.dart';
 ///
 /// [code]/[remainingSeconds] 传 null 表示该账户 secret 尚未解密（后台解密中），
 /// 动态码位置显示占位星号、不显示倒计时，避免解密完成前界面空白。
+/// [syncStatus] 非空时在 issuer 行尾显示同步状态小图标：
+/// 待同步（云上传·警示色）/ 已备份（云对勾·品牌色）。
 class AccountCard extends StatelessWidget {
   final CachedAccount account;
 
@@ -16,6 +19,9 @@ class AccountCard extends StatelessWidget {
 
   /// 当前时间步剩余秒数；null = 解密中占位
   final int? remainingSeconds;
+
+  /// 同步状态（null = 从未同步，不显示图标）
+  final AccountSyncStatus? syncStatus;
 
   /// 点击卡片（复制验证码）
   final VoidCallback? onTap;
@@ -28,6 +34,7 @@ class AccountCard extends StatelessWidget {
     required this.account,
     required this.code,
     required this.remainingSeconds,
+    this.syncStatus,
     this.onTap,
     this.onLongPress,
   });
@@ -49,11 +56,22 @@ class AccountCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      account.issuer.isEmpty ? '未命名服务' : account.issuer,
-                      style: theme.textTheme.titleMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            account.issuer.isEmpty ? '未命名服务' : account.issuer,
+                            style: theme.textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // 每账户同步状态小图标（待同步/已备份）
+                        if (syncStatus != null) ...[
+                          const SizedBox(width: 6),
+                          _SyncStatusIcon(status: syncStatus!),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -90,5 +108,35 @@ class AccountCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// 同步状态小图标：待同步（上传箭头·警示色）/ 已备份（对勾·品牌色）
+class _SyncStatusIcon extends StatelessWidget {
+  final AccountSyncStatus status;
+  const _SyncStatusIcon({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    switch (status) {
+      case AccountSyncStatus.pending:
+        return Tooltip(
+          message: '待同步（备份未成功上传，将自动重试）',
+          child: const Icon(
+            Icons.cloud_upload_outlined,
+            size: 15,
+            color: Colors.orange,
+          ),
+        );
+      case AccountSyncStatus.backedUp:
+        return Tooltip(
+          message: '已备份到服务端',
+          child: const Icon(
+            Icons.cloud_done_outlined,
+            size: 15,
+            color: AppTheme.brand,
+          ),
+        );
+    }
   }
 }

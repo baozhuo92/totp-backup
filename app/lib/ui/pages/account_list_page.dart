@@ -77,6 +77,21 @@ class _AccountListPageState extends State<AccountListPage> {
       ..showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// 手动同步：立即清空同步队列并弹结果提示
+  /// （下拉刷新 / AppBar 同步图标点击 / 设置页按钮共用）
+  Future<void> _manualSync() async {
+    final ok = await SyncService.instance.flush();
+    if (!mounted) return;
+    final sync = SyncService.instance;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(ok
+            ? '同步完成，全部已备份到服务端'
+            : '同步失败：${sync.lastError ?? '网络异常'}，已加入重试队列'),
+      ));
+  }
+
   /// AppBar 更多菜单（恢复/导入导出/设置入口）
   void _showMoreMenu() {
     showModalBottomSheet<void>(
@@ -221,7 +236,8 @@ class _AccountListPageState extends State<AccountListPage> {
         return IconButton(
           icon: icon,
           tooltip: tooltip,
-          onPressed: () => _hint(tooltip),
+          // 点击同步图标立即手动同步
+          onPressed: _manualSync,
         );
       },
     );
@@ -276,24 +292,29 @@ class _AccountListPageState extends State<AccountListPage> {
                     hasAny: AccountCache.instance.accounts.isNotEmpty,
                   );
                 }
-                return ListView.builder(
-                  padding: const EdgeInsets.only(top: 4, bottom: 88),
-                  itemCount: accounts.length,
-                  itemBuilder: (context, index) {
-                    final a = accounts[index];
-                    // secret 未解密时传 null → 卡片显示占位星号
-                    return AccountCard(
-                      account: a,
-                      code: a.hasSecret
-                          ? TotpService.currentCode(a.toAccount())
-                          : null,
-                      remainingSeconds: a.hasSecret
-                          ? TotpService.remainingSeconds(a.period)
-                          : null,
-                      onTap: () => _copyCode(a),
-                      onLongPress: () => _showAccountMenu(a),
-                    );
-                  },
+                return RefreshIndicator(
+                  onRefresh: _manualSync,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(top: 4, bottom: 88),
+                    itemCount: accounts.length,
+                    itemBuilder: (context, index) {
+                      final a = accounts[index];
+                      // secret 未解密时传 null → 卡片显示占位星号
+                      return AccountCard(
+                        account: a,
+                        code: a.hasSecret
+                            ? TotpService.currentCode(a.toAccount())
+                            : null,
+                        remainingSeconds: a.hasSecret
+                            ? TotpService.remainingSeconds(a.period)
+                            : null,
+                        syncStatus: AccountCache.instance.syncStateOf(a.clientId),
+                        onTap: () => _copyCode(a),
+                        onLongPress: () => _showAccountMenu(a),
+                      );
+                    },
+                  ),
                 );
               },
             ),

@@ -2,8 +2,18 @@ import 'package:flutter/foundation.dart';
 
 import '../core/crypto/crypto_service.dart';
 import '../data/local/account_repository.dart';
+import '../data/local/app_database.dart';
 import '../data/models/totp_account.dart';
 import 'lock_service.dart';
+
+/// 账户同步状态（每账户轻量指示，卡片小图标）
+enum AccountSyncStatus {
+  /// 待同步：t_sync_queue 中仍有该账户未成功上传的变更（含失败重试中）
+  pending,
+
+  /// 已备份：最近一次同步成功（last_synced_time 非空）且当前不在队列
+  backedUp,
+}
 
 /// 缓存中的账户条目：secret 可空（null 表示尚未解密）。
 /// 列表页优先展示元数据（issuer/账号/参数），动态码区显示占位，
@@ -59,6 +69,9 @@ class AccountCache extends ChangeNotifier {
   bool _loaded = false;
   bool _decrypting = false;
 
+  /// 每账户同步状态（clientId → 状态；无记录表示从未同步过）
+  Map<String, AccountSyncStatus> _syncStates = const {};
+
   /// 账户列表（不可变视图）
   List<CachedAccount> get accounts => List.unmodifiable(_accounts);
 
@@ -67,6 +80,9 @@ class AccountCache extends ChangeNotifier {
 
   /// 是否正在后台解密（用于 UI 可选提示）
   bool get decrypting => _decrypting;
+
+  /// 查询账户同步状态（无记录返回 null = 从未同步）
+  AccountSyncStatus? syncStateOf(String clientId) => _syncStates[clientId];
 
   /// 按搜索词过滤（issuer/account 包含匹配，忽略大小写）
   List<CachedAccount> search(String query) {
@@ -93,6 +109,8 @@ class AccountCache extends ChangeNotifier {
       ),
       ..._accounts,
     ];
+    // 新账户尚未同步，标记待同步（enqueue 后仍为 pending，flush 成功后更新）
+    _syncStates = {..._syncStates, account.clientId: AccountSyncStatus.pending};
     _loaded = true;
     notifyListeners();
   }
@@ -117,6 +135,7 @@ class AccountCache extends ChangeNotifier {
         .toList();
     _loaded = true;
     _decrypting = rows.isNotEmpty;
+    await refreshSyncStates();
     notifyListeners();
 
     // 阶段二：后台逐条解密（PBKDF2 每条约 1 秒），完成一条更新一条
@@ -142,9 +161,39 @@ class AccountCache extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 刷新每账户同步状态（入队/同步完成后由 SyncService 调用）。
+  /// 判定规则：
+  /// - 队列中有该 client_id → pending（待同步/重试中）
+  /// - 否则 last_synced_time > 0 → backedUp（已备份）
+  /// - 两者皆无 → 无状态（从未同步，不显示图标）
+  Future<void> refreshSyncStates() async {
+    final db = await AppDatabase.instance.database;
+    final queueRows =
+        await db.query('t_sync_queue', columns: ['client_id']);
+    final pendingIds =
+        queueRows.map((r) => r['client_id'] as String).toSet();
+    final accountRows = await db.query(
+      't_account',
+      columns: ['client_id', 'last_synced_time'],
+    );
+    final states = <String, AccountSyncStatus>{};
+    for (final r in accountRows) {
+      final id = r['client_id'] as String;
+      final lastSynced = r['last_synced_time'] as int?;
+      if (pendingIds.contains(id)) {
+        states[id] = AccountSyncStatus.pending;
+      } else if (lastSynced != null && lastSynced > 0) {
+        states[id] = AccountSyncStatus.backedUp;
+      }
+    }
+    _syncStates = states;
+    notifyListeners();
+  }
+
   /// 上锁时清空缓存（明文不残留内存）
   void clear() {
     _accounts = const [];
+    _syncStates = const {};
     _loaded = false;
     _decrypting = false;
     notifyListeners();
