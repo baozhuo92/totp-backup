@@ -134,9 +134,9 @@ services:
     environment:
       API_KEY: "please-change-me-to-a-long-random-string"
       PORT: "8080"
-      DB_PATH: "/app/data/totp.db"
+      DB_PATH: "/totp.db"
     volumes:
-      - ./data:/app/data          # SQLite 数据持久化（备份数据不随容器销毁）
+      - ./data/totp.db:/totp.db          # SQLite 数据持久化（备份数据不随容器销毁）
     restart: unless-stopped
 ```
 

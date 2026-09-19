@@ -1,15 +1,15 @@
 services:
   totp-server:
-    image: baozhuo520/totp-backup-server
+    image: docker.1ms.run/baozhuo520/totp-backup-server
     container_name: totp-backup-server
     ports:
       - "8080:8080"
     environment:
       API_KEY: "please-change-me-to-a-long-random-string"
       PORT: "8080"
-      DB_PATH: "/app/data/totp.db"
+      DB_PATH: "/totp.db"
     volumes:
-      - ./data:/app/data          # SQLite 数据持久化（备份数据不随容器销毁）
+      - ./data/totp.db:/totp.db          # SQLite 数据持久化（备份数据不随容器销毁）
     restart: unless-stopped
     # 说明：基础镜像为 distroless/static（无 wget），故不配置 healthcheck，
     # 容器异常退出由 restart: unless-stopped 兜底自动拉起。
