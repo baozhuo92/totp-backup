@@ -37,6 +37,10 @@ func main() {
 	h := handler.NewHealthHandler()
 	h.Register(r)
 
+	// 公开状态页：GET /（仅统计，无需 API Key）
+	sh := handler.NewStatusHandler(conn)
+	sh.Register(r)
+
 	api := r.Group("/api", handler.AuthMiddleware(cfg.APIKey))
 	ah := handler.NewAccountHandler(conn, node)
 	ah.Register(api)
