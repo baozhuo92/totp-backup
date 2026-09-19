@@ -83,18 +83,13 @@ services:
     container_name: totp-backup-server
     ports:
       - "8080:8080"
-    entrypoint:
-      - API_KEY="please-change-me-to-a-long-random-string"
-      - PORT=8080
-      - DB_PATH=/app/data/totp.db
+    environment:
+      API_KEY: "please-change-me-to-a-long-random-string"
+      PORT: "8080"
+      DB_PATH: "/app/data/totp.db"
     volumes:
       - ./data:/app/data          # SQLite 数据持久化（备份数据不随容器销毁）
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
 ```
 
 **③ 构建镜像并启动**（`docker-compose.yml` 中 `image` 引用本地构建的镜像标签，先构建再启动）：
@@ -104,7 +99,7 @@ docker build -t baozhuo520/totp-backup-server .
 docker compose up -d
 ```
 
-> ⚠️ **重要：部署前必须修改 `API_KEY`**。请将 `entrypoint` 中的
+> ⚠️ **重要：部署前必须修改 `API_KEY`**。请将 `environment` 中的
 > `please-change-me-to-a-long-random-string` 替换为至少 32 字符的强随机串，
 > 例如 `openssl rand -hex 32` 的输出。App 设置页需填写**同一个值**，
 > 客户端通过请求头 `X-API-Key` 携带进行鉴权。
