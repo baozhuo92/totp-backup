@@ -204,12 +204,9 @@ flutter build apk --release
 
 如果这个项目对你有帮助，欢迎赞赏支持（微信 / 支付宝）：
 
-<p align="center">
-  <img src="docs/pays/wechat.png" alt="微信赞赏" width="220">
-  <img src="docs/pays/alipay.jpg" alt="支付宝赞赏" width="220">
-  <br>
-  <em>微信 · 支付宝</em>
-</p>
+![微信赞赏](docs/pays/wechat.png)
+![支付宝赞赏](docs/pays/alipay.jpg)
+
 
 ## 📄 许可证
 
