@@ -39,6 +39,10 @@
 
 | 提交 | 内容 |
 | --- | --- |
+| 1afe1d9 | README 增加测试工具链接；.env 与 IDE 目录移出版本控制 |
+| a707a06 | 纳入 Flutter 默认多平台目录 |
+| 50f42ff | 移除未使用的 path_provider 依赖 |
+| 698886d | 根 README + agent.md |
 | 2af4d84 | 设置页（服务端地址/API Key 编辑） |
 | 10fc6a4 | otpauth 文本导入导出（剪贴板、去重、入队同步） |
 | af6bd6a | 从服务端恢复页（全量解密校验 + 幂等入库） |
