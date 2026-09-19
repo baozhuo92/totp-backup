@@ -203,9 +203,9 @@ flutter build apk --release
 ## 💖 支持项目
 
 如果这个项目对你有帮助，欢迎赞赏支持（微信 / 支付宝）：
-
-![微信赞赏](docs/pays/wechat.png)
-![支付宝赞赏](docs/pays/alipay.jpg)
+| 微信 | 支付宝 |
+|------|--------|
+| ![微信赞赏](docs/pays/wechat.png) | ![支付宝赞赏](docs/pays/alipay.jpg) |
 
 
 ## 📄 许可证
