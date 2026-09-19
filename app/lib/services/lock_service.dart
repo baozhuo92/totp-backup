@@ -104,19 +104,58 @@ class LockService {
     _masterPassword = null;
   }
 
+  /// 当前指纹解锁开关状态（t_settings 中的 biometric_enabled）
+  Future<bool> isBiometricEnabled() =>
+      SettingsRepository.instance.getBool(_biometricEnabledKey);
+
+  /// 启用指纹解锁：将内存主口令写入 biometric storage
+  /// （enforceBiometrics：写入即触发系统指纹授权，取消/失败返回 false）。
+  /// 主口令未解锁时返回 false。
+  Future<bool> enableBiometric() async {
+    final pwd = _masterPassword;
+    if (pwd == null || pwd.isEmpty) return false;
+    try {
+      await _writeBiometricPassword(pwd);
+    } catch (_) {
+      return false; // 用户取消指纹授权或写入失败
+    }
+    await SettingsRepository.instance.setBool(_biometricEnabledKey, true);
+    return true;
+  }
+
+  /// 禁用指纹解锁：删除 biometric 主口令并关闭开关
+  Future<void> disableBiometric() async {
+    try {
+      await _biometricStorage.delete(key: _biometricPwdKey);
+    } catch (_) {
+      // 删除失败忽略（读取时返回空自然失效）
+    }
+    await SettingsRepository.instance.setBool(_biometricEnabledKey, false);
+  }
+
+  /// 生物识别存储选项：独立 storageNamespace 隔离（单一 AES-GCM 算法）。
+  ///
+  /// 为什么必须有独立命名空间：flutter_secure_storage 无 namespace 时
+  /// 普通模式（RSA）与指纹模式（AES-GCM）共用同一存储与全局算法标记，
+  /// 会互相触发"算法变更→迁移→失败→resetOnError 清空全部数据"（已实测复现，
+  /// 表现为服务器配置丢失）。独立 namespace 后指纹主口令与任何数据
+  /// 完全隔离，算法单一，杜绝清库；resetOnError 关闭，密钥异常时报错
+  /// 而非静默删数据。
+  static const _biometricStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions.biometric(
+      enforceBiometrics: true,
+      resetOnError: false,
+      storageNamespace: 'biometric_v2',
+    ),
+  );
+
   /// 以生物识别保护方式写入主口令（enforceBiometrics：写入也需指纹授权）
   Future<void> _writeBiometricPassword(String password) async {
-    const storage = FlutterSecureStorage(
-      aOptions: AndroidOptions.biometric(enforceBiometrics: true),
-    );
-    await storage.write(key: _biometricPwdKey, value: password);
+    await _biometricStorage.write(key: _biometricPwdKey, value: password);
   }
 
   /// 读取生物识别保护的主口令（触发系统指纹验证）
   Future<String?> _readBiometricPassword() async {
-    const storage = FlutterSecureStorage(
-      aOptions: AndroidOptions.biometric(enforceBiometrics: true),
-    );
-    return storage.read(key: _biometricPwdKey);
+    return _biometricStorage.read(key: _biometricPwdKey);
   }
 }
