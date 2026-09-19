@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../data/local/account_repository.dart';
 import '../data/local/app_database.dart';
 import '../data/local/settings_repository.dart';
@@ -9,7 +11,10 @@ import '../data/remote/api_client.dart';
 /// 队列操作类型
 enum SyncOp { add, update, delete }
 
-/// 自动备份同步服务（单例）。
+/// 同步状态（供 UI 常驻指示：AppBar 图标/角标）
+enum SyncStatus { idle, syncing, success, failed }
+
+/// 自动备份同步服务（单例，ChangeNotifier）。
 ///
 /// 设计要点：
 /// - 本地增/改/删先写入 t_sync_queue（payload 保存**密文** secret，不落明文）
@@ -17,7 +22,8 @@ enum SyncOp { add, update, delete }
 ///   失败累加 retry_count 留队（下次 flush 重试）
 /// - 上传的 secret_ciphertext 与本地库同一份密文，恢复端用相同主口令即可解密
 /// - 网络失败不阻塞本地操作；服务端未配置时 flush 直接跳过
-class SyncService {
+/// - 通过 [status]/[pendingCount] 对外暴露同步进度，UI 监听刷新
+class SyncService extends ChangeNotifier {
   SyncService._();
 
   /// 单例
@@ -25,6 +31,29 @@ class SyncService {
 
   /// 避免并发 flush（重复触发时合并为一次）
   bool _flushing = false;
+
+  SyncStatus _status = SyncStatus.idle;
+  int _pendingCount = 0;
+  String? _lastError;
+  DateTime? _lastSyncTime;
+
+  /// 当前同步状态（UI 常驻指示用）
+  SyncStatus get status => _status;
+
+  /// 待同步队列条数（>0 表示还有未成功上传的变更）
+  int get pendingCount => _pendingCount;
+
+  /// 最近一次失败原因（status==failed 时有效）
+  String? get lastError => _lastError;
+
+  /// 最近一次成功同步时间
+  DateTime? get lastSyncTime => _lastSyncTime;
+
+  /// 刷新待同步计数（enqueue/删除队列后调用）
+  Future<void> refreshPending() async {
+    _pendingCount = await _countPending();
+    notifyListeners();
+  }
 
   /// 增/改后入队（同 client_id 已有队列记录时覆盖为 UPDATE，避免重复堆积）
   Future<void> enqueueAddOrUpdate(TOTPAccount account) async {
@@ -63,6 +92,7 @@ class SyncService {
         'created_time': DateTime.now().millisecondsSinceEpoch,
       });
     }
+    await refreshPending();
   }
 
   /// 删除后入队（服务端软删除；payload 不需要）
@@ -81,32 +111,49 @@ class SyncService {
       'retry_count': 0,
       'created_time': DateTime.now().millisecondsSinceEpoch,
     });
+    await refreshPending();
   }
 
-  /// 队列中待同步的条目数（供界面展示可选）
-  Future<int> pendingCount() async {
+  /// 队列中待同步的条目数
+  Future<int> _countPending() async {
     final db = await AppDatabase.instance.database;
     final rows = await db.query('t_sync_queue', columns: ['id']);
     return rows.length;
   }
 
   /// 尝试清空队列（一次网络往返逐条处理）。
-  /// 服务端未配置或无队列时直接返回；失败条目重试计数 +1 后停止本轮。
-  /// 返回是否全部成功。
+  /// 服务端未配置或无队列时直接返回 true；失败条目重试计数 +1 后停止本轮。
+  /// 返回是否全部成功（供调用方决定是否弹提示）。
   Future<bool> flush() async {
     if (_flushing) return true; // 已有 flush 在跑，本轮合并
     _flushing = true;
+    _status = SyncStatus.syncing;
+    notifyListeners();
     try {
       final configured = await SettingsRepository.instance.hasServerConfig();
-      if (!configured) return true;
+      if (!configured) {
+        _status = SyncStatus.idle;
+        await refreshPending();
+        return true;
+      }
       final serverUrl = await SettingsRepository.instance.getServerUrl();
       final apiKey = await SettingsRepository.instance.getApiKey();
-      if (serverUrl == null || apiKey == null) return true;
+      if (serverUrl == null || apiKey == null) {
+        _status = SyncStatus.idle;
+        await refreshPending();
+        return true;
+      }
 
       final client = ApiClient(baseUrl: serverUrl, apiKey: apiKey);
       final db = await AppDatabase.instance.database;
       final rows = await db.query('t_sync_queue', orderBy: 'id ASC');
-      if (rows.isEmpty) return true;
+      if (rows.isEmpty) {
+        _status = SyncStatus.success;
+        _lastSyncTime = DateTime.now();
+        await refreshPending();
+        notifyListeners();
+        return true;
+      }
 
       for (final row in rows) {
         final id = row['id'] as int;
@@ -134,7 +181,9 @@ class SyncService {
           }
           // 成功：移除队列行
           await db.delete('t_sync_queue', where: 'id = ?', whereArgs: [id]);
-        } on ApiException {
+          _pendingCount--;
+          notifyListeners();
+        } on ApiException catch (e) {
           // 失败：retry_count +1，保留队列；停止本轮（避免网络故障时空转）
           final retry = (row['retry_count'] as int) + 1;
           await db.update(
@@ -143,9 +192,17 @@ class SyncService {
             where: 'id = ?',
             whereArgs: [id],
           );
+          _status = SyncStatus.failed;
+          _lastError = e.message;
+          await refreshPending();
+          notifyListeners();
           return false;
         }
       }
+      _status = SyncStatus.success;
+      _lastSyncTime = DateTime.now();
+      await refreshPending();
+      notifyListeners();
       return true;
     } finally {
       _flushing = false;

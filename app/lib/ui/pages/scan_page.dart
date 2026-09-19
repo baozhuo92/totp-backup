@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/local/account_repository.dart';
 import '../../data/models/totp_account.dart';
+import '../../main.dart' show appMessengerKey;
 import '../../services/account_cache.dart';
 import '../../services/lock_service.dart';
 import '../../services/sync_service.dart';
@@ -93,20 +96,36 @@ class _ScanPageState extends State<ScanPage> {
     return result ?? false;
   }
 
-  /// 入库并刷新缓存；入队同步并立即尝试（失败自动留队，周期重试）
+  /// 确认添加：立即返回列表（秒级反馈），加密入库/同步后台执行
   Future<void> _save(TOTPAccount account) async {
     final pwd = LockService.instance.masterPassword;
     if (pwd == null) return;
-    await AccountRepository().insert(account, pwd);
-    await AccountCache.instance.reload();
-    await SyncService.instance.enqueueAddOrUpdate(account);
-    // 不 await：同步是后台行为，失败由队列机制兜底
-    SyncService.instance.flush();
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('已添加 ${account.issuer}')));
-    Navigator.pop(context);
+    Navigator.pop(context); // 先关扫码页，避免等待加密耗时
+    unawaited(_persist(account, pwd));
+  }
+
+  /// 后台持久化：加密入库 → 缓存元数据秒出 → 入队同步并尝试 → 全量两阶段重载
+  Future<void> _persist(TOTPAccount account, String pwd) async {
+    try {
+      await AccountRepository().insert(account, pwd);
+      // 立即把新账户元数据插入缓存（列表先显示信息，动态码后台解密）
+      AccountCache.instance.insertMeta(account);
+      await SyncService.instance.enqueueAddOrUpdate(account);
+      final ok = await SyncService.instance.flush();
+      await AccountCache.instance.reload();
+      appMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(ok
+              ? '已添加 ${account.issuer} 并备份到服务端'
+              : '已添加 ${account.issuer}，备份失败已入重试队列'),
+        ));
+    } catch (_) {
+      appMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('保存失败，请重试')),
+      );
+    }
   }
 
   @override

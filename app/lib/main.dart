@@ -10,6 +10,11 @@ void main() {
   runApp(const TotpApp());
 }
 
+/// 全局 SnackBar 脚手架 key：供后台任务（如扫码页 pop 后的加密入库、
+/// 同步完成）在任意页面弹出提示。
+final GlobalKey<ScaffoldMessengerState> appMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 /// 应用根组件：装配 zolysoft 主题（明暗跟随系统）
 class TotpApp extends StatelessWidget {
   const TotpApp({super.key});
@@ -19,6 +24,7 @@ class TotpApp extends StatelessWidget {
     return MaterialApp(
       title: 'TOTP 备份',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: appMessengerKey,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,

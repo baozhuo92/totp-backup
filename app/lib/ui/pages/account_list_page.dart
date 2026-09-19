@@ -16,8 +16,9 @@ import 'restore_page.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 
-/// 账户列表主界面：动态码卡片 + 倒计时圆环 + 搜索 + 空状态。
-/// 数据源为 AccountCache（内存明文缓存，解锁后加载），每秒重绘一次刷新验证码。
+/// 账户列表主界面：动态码卡片 + 倒计时圆环 + 搜索 + 空状态 + 同步状态指示。
+/// 数据源为 AccountCache（两阶段：元数据秒出，secret 后台逐条解密），
+/// 每秒重绘刷新验证码；AppBar 常驻同步状态（同步中/失败/待同步数）。
 class AccountListPage extends StatefulWidget {
   const AccountListPage({super.key});
 
@@ -33,15 +34,17 @@ class _AccountListPageState extends State<AccountListPage> {
   @override
   void initState() {
     super.initState();
-    // 首次进入加载缓存（解锁后主口令已在内存）
+    // 首次进入加载缓存（解锁后主口令已在内存；两阶段加载秒出元数据）
     if (!AccountCache.instance.loaded) {
       AccountCache.instance.reload();
     }
+    // 初始化待同步计数（AppBar 角标）
+    SyncService.instance.refreshPending();
     // 每秒重绘：动态码与倒计时圆环随秒刷新
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    // 每 60 秒尝试清空同步队列（自动重试失败的备份）
+    // 每 60 秒尝试清空同步队列（自动重试失败的备份；不弹提示，仅更新状态图标）
     _syncTicker = Timer.periodic(const Duration(seconds: 60), (_) {
       SyncService.instance.flush();
     });
@@ -54,9 +57,13 @@ class _AccountListPageState extends State<AccountListPage> {
     super.dispose();
   }
 
-  /// 点击卡片复制验证码
-  Future<void> _copyCode(TOTPAccount account) async {
-    final code = TotpService.currentCode(account);
+  /// 点击卡片复制验证码（secret 未解密时提示等待）
+  Future<void> _copyCode(CachedAccount account) async {
+    if (!account.hasSecret) {
+      _hint('正在解密账户，请稍候…');
+      return;
+    }
+    final code = TotpService.currentCode(account.toAccount());
     await Clipboard.setData(ClipboardData(text: code));
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -64,7 +71,13 @@ class _AccountListPageState extends State<AccountListPage> {
       ..showSnackBar(SnackBar(content: Text('验证码 $code 已复制')));
   }
 
-  /// AppBar 更多菜单（恢复/导入导出/设置入口，对应任务 10/11/12 接入）
+  void _hint(String msg) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  /// AppBar 更多菜单（恢复/导入导出/设置入口）
   void _showMoreMenu() {
     showModalBottomSheet<void>(
       context: context,
@@ -167,12 +180,70 @@ class _AccountListPageState extends State<AccountListPage> {
     );
   }
 
+  /// AppBar 同步状态指示（同步中旋转 / 失败⚠️+待同步数 / 成功对勾 / 空闲云朵）
+  Widget _buildSyncIndicator() {
+    return ListenableBuilder(
+      listenable: SyncService.instance,
+      builder: (context, _) {
+        final sync = SyncService.instance;
+        final Widget icon;
+        String tooltip;
+        if (sync.status == SyncStatus.syncing) {
+          icon = const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+          tooltip = '正在同步到服务端…';
+        } else if (sync.status == SyncStatus.failed || sync.pendingCount > 0) {
+          icon = Badge.count(
+            count: sync.pendingCount,
+            backgroundColor: AppTheme.danger,
+            child: Icon(
+              Icons.cloud_upload_outlined,
+              color: sync.status == SyncStatus.failed
+                  ? AppTheme.danger
+                  : null,
+            ),
+          );
+          tooltip = sync.status == SyncStatus.failed
+              ? '同步失败：${sync.lastError ?? ''}\n待同步 ${sync.pendingCount} 项，将自动重试'
+              : '待同步 ${sync.pendingCount} 项，点击查看';
+        } else if (sync.status == SyncStatus.success) {
+          icon = const Icon(Icons.cloud_done_outlined, color: AppTheme.brand);
+          tooltip = sync.lastSyncTime == null
+              ? '已同步'
+              : '已同步（${_fmtTime(sync.lastSyncTime!)}）';
+        } else {
+          icon = const Icon(Icons.cloud_outlined);
+          tooltip = '暂无待同步内容';
+        }
+        return IconButton(
+          icon: icon,
+          tooltip: tooltip,
+          onPressed: () => _hint(tooltip),
+        );
+      },
+    );
+  }
+
+  static String _fmtTime(DateTime t) {
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前';
+    return '${t.month}月${t.day}日 ${t.hour.toString().padLeft(2, '0')}:'
+        '${t.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('账户'),
         actions: [
+          _buildSyncIndicator(),
           IconButton(
             icon: const Icon(Icons.more_vert),
             tooltip: '更多',
@@ -210,10 +281,15 @@ class _AccountListPageState extends State<AccountListPage> {
                   itemCount: accounts.length,
                   itemBuilder: (context, index) {
                     final a = accounts[index];
+                    // secret 未解密时传 null → 卡片显示占位星号
                     return AccountCard(
                       account: a,
-                      code: TotpService.currentCode(a),
-                      remainingSeconds: TotpService.remainingSeconds(a.period),
+                      code: a.hasSecret
+                          ? TotpService.currentCode(a.toAccount())
+                          : null,
+                      remainingSeconds: a.hasSecret
+                          ? TotpService.remainingSeconds(a.period)
+                          : null,
                       onTap: () => _copyCode(a),
                       onLongPress: () => _showAccountMenu(a),
                     );
@@ -233,7 +309,7 @@ class _AccountListPageState extends State<AccountListPage> {
   }
 
   /// 删除账户：确认后本地删除 + 入队 DELETE 并尝试同步
-  Future<void> _deleteAccount(TOTPAccount account) async {
+  Future<void> _deleteAccount(CachedAccount account) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -257,7 +333,7 @@ class _AccountListPageState extends State<AccountListPage> {
     );
     if (confirmed != true) return;
     await AccountRepository().delete(account.clientId);
-    await AccountCache.instance.reload();
+    await AccountCache.instance.reload(); // 两阶段：元数据立即刷新，解密后台
     await SyncService.instance.enqueueDelete(account.clientId);
     SyncService.instance.flush();
     if (!mounted) return;
@@ -266,8 +342,8 @@ class _AccountListPageState extends State<AccountListPage> {
       ..showSnackBar(SnackBar(content: Text('已删除 ${account.issuer}')));
   }
 
-  /// 长按账户操作菜单（编辑/删除）
-  void _showAccountMenu(TOTPAccount account) {
+  /// 长按账户操作菜单（复制/编辑/删除；未解密时复制与编辑禁用）
+  void _showAccountMenu(CachedAccount account) {
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -275,6 +351,7 @@ class _AccountListPageState extends State<AccountListPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              enabled: account.hasSecret,
               leading: const Icon(Icons.copy),
               title: const Text('复制验证码'),
               onTap: () {
@@ -283,11 +360,16 @@ class _AccountListPageState extends State<AccountListPage> {
               },
             ),
             ListTile(
+              enabled: account.hasSecret,
               leading: const Icon(Icons.edit_outlined),
               title: const Text('编辑'),
               onTap: () {
                 Navigator.pop(ctx);
-                _openManualAddPage(existing: account);
+                if (!account.hasSecret) {
+                  _hint('账户正在解密，请稍候再编辑');
+                  return;
+                }
+                _openManualAddPage(existing: account.toAccount());
               },
             ),
             ListTile(
