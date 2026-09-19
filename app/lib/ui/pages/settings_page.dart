@@ -99,7 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  /// 立即手动同步（不依赖表单有效性，队列为空时提示）
+  /// 立即上传本地变更（不清空队列时不涉及拉取；从服务端拉取走「从服务端恢复」）
   Future<void> _syncNow() async {
     setState(() => _syncing = true);
     final ok = await SyncService.instance.flush();
@@ -110,8 +110,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Text(ok
-            ? '同步完成，全部已备份到服务端'
-            : '同步失败：${sync.lastError ?? '网络异常'}，已加入重试队列'),
+            ? '上传完成，全部已备份到服务端'
+            : '上传失败：${sync.lastError ?? '网络异常'}，已加入重试队列'),
       ));
   }
 
@@ -192,7 +192,14 @@ class _SettingsPageState extends State<SettingsPage> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.cloud_upload_outlined),
-                        label: const Text('立即同步'),
+                        label: const Text('立即上传'),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '仅上传本地变更到服务端，不做拉取；从服务端恢复请用列表页「从服务端恢复」',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
                       ),
                     ],
                   ),
