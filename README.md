@@ -159,8 +159,8 @@ flutter build apk --release
 如果这个项目对你有帮助，欢迎赞赏支持（微信 / 支付宝）：
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/baozhuo92/safeline-app/main/docs/images/pays/cb5f2f1b970202588a88db979bf6b1e3.png" alt="微信赞赏" width="220">
-  <img src="https://raw.githubusercontent.com/baozhuo92/safeline-app/main/docs/images/pays/928fae21fe7ee22890cdd584a9a7832c.jpg" alt="支付宝赞赏" width="220">
+  <img src="docs/pays/wechat.png" alt="微信赞赏" width="220">
+  <img src="docs/pays/alipay.jpg" alt="支付宝赞赏" width="220">
   <br>
   <em>微信 · 支付宝</em>
 </p>
