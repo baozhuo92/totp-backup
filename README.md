@@ -120,14 +120,7 @@ WantedBy=multi-user.target
 
 #### 方式二：Docker Compose 部署
 
-**前置条件**：Docker 与 Docker Compose、Go 1.22+（用于编译打进镜像的二进制）。
-
-Dockerfile 基于 distroless 镜像，需先将编译产物打进镜像：
-
-```bash
-cd server
-CGO_ENABLED=0 GOOS=linux go build -o app .
-```
+**前置条件**：Docker 与 Docker Compose。
 
 编写 `docker-compose.yml`（内容如下）：
 
