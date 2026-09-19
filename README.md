@@ -65,16 +65,71 @@ totp-backup/
 
 ### 1. 部署服务端
 
-**前置条件**：Docker 与 Docker Compose、Go 1.22+（用于本地编译服务端二进制）。
+服务端通过环境变量配置（两种部署方式通用）：
 
-**① 编译服务端二进制**（Dockerfile 基于 distroless 镜像，需将编译产物打进镜像）：
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `API_KEY` | ✅ | - | 客户端鉴权密钥（请求头 `X-API-Key`），务必使用 ≥32 字符强随机串 |
+| `PORT` | 否 | `8080` | 监听端口 |
+| `DB_PATH` | 否 | `./data/totp.db` | SQLite 数据文件路径 |
+
+健康检查：`GET /api/health`。
+
+#### 方式一：直接运行二进制（推荐，无需 Docker）
+
+**前置条件**：Go 1.22+。
+
+Linux x64 服务器：
+
+```bash
+cd server
+# 静态编译（CGO_ENABLED=0，产物可直接拷到服务器运行）
+CGO_ENABLED=0 GOOS=linux go build -o totp-server .
+# 运行（API_KEY 必填，否则程序拒绝启动）
+API_KEY="$(openssl rand -hex 32)" PORT=8080 DB_PATH="./data/totp.db" ./totp-server
+```
+
+Windows 本地开发调试：
+
+```powershell
+cd server
+go build -o totp-server.exe .
+$env:API_KEY="your-long-random-key"; $env:PORT="8080"; .\totp-server.exe
+```
+
+> ⚠️ **务必修改 `API_KEY`**：替换为至少 32 字符的强随机串（例如 `openssl rand -hex 32` 的输出），App 设置页需填写**同一个值**。
+
+生产环境建议用 systemd 或 Docker 托管进程，避免依赖 SSH 会话（systemd 示例）：
+
+```ini
+# /etc/systemd/system/totp-server.service
+[Unit]
+Description=TOTP Backup Server
+After=network.target
+
+[Service]
+Environment=API_KEY=your-long-random-key
+Environment=PORT=8080
+Environment=DB_PATH=/srv/totp/data/totp.db
+ExecStart=/srv/totp/totp-server
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 方式二：Docker Compose 部署
+
+**前置条件**：Docker 与 Docker Compose、Go 1.22+（用于编译打进镜像的二进制）。
+
+Dockerfile 基于 distroless 镜像，需先将编译产物打进镜像：
 
 ```bash
 cd server
 CGO_ENABLED=0 GOOS=linux go build -o app .
 ```
 
-**② 编写 `docker-compose.yml`**（内容如下）：
+编写 `docker-compose.yml`（内容如下）：
 
 ```yaml
 services:
@@ -92,19 +147,17 @@ services:
     restart: unless-stopped
 ```
 
-**③ 构建镜像并启动**（`docker-compose.yml` 中 `image` 引用本地构建的镜像标签，先构建再启动）：
+构建并启动：
 
 ```bash
 docker build -t baozhuo520/totp-backup-server .
 docker compose up -d
 ```
 
-> ⚠️ **重要：部署前必须修改 `API_KEY`**。请将 `environment` 中的
-> `please-change-me-to-a-long-random-string` 替换为至少 32 字符的强随机串，
-> 例如 `openssl rand -hex 32` 的输出。App 设置页需填写**同一个值**，
+> ⚠️ **务必修改 `API_KEY`**：将 `environment` 中的
+> `please-change-me-to-a-long-random-string` 替换为至少 32 字符的强随机串
+> （例如 `openssl rand -hex 32` 的输出）。App 设置页需填写**同一个值**，
 > 客户端通过请求头 `X-API-Key` 携带进行鉴权。
-
-服务默认监听 `0.0.0.0:8080`，健康检查：`GET /api/health`。
 
 ### 2. 构建 / 安装 App
 
